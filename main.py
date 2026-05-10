@@ -204,38 +204,65 @@ def make_grid_figures(results_esm: dict, results_tsc: dict):
 # STEP 6  —  (Optional) Optuna fine-tuning
 # ─────────────────────────────────────────────────────────────────────────────
 
-def optuna_fine_tune(splits: dict, run: bool = True) -> tuple[dict, dict]:
+def optuna_fine_tune(
+    splits: dict,
+    results_esm: dict,
+    results_tsc: dict,
+    run: bool = True,
+) -> tuple[dict, dict]:
     """
-    If run=False, returns None for both and the best grid-search params
-    should be used manually in train_final_models().
+    Uses best architecture from grid search and only optimizes:
+        lr, batch_size
     """
+
     if not run:
         print("\n[6/8] Skipping Optuna (run=False)")
         return None, None
 
     print(f"\n[6/8] Optuna search ({OPTUNA_TRIALS} trials each) …")
 
+    # ── Best architectures from grid search ────────────────────────────────
+    best_esm_arch = min(results_esm, key=lambda k: results_esm[k]["val_rmse"])
+    best_tsc_arch = min(results_tsc, key=lambda k: results_tsc[k]["val_rmse"])
+
+    esm_layers, esm_hidden = best_esm_arch
+    tsc_layers, tsc_hidden = best_tsc_arch
+
+    print(
+        f"  Best ESM architecture      : "
+        f"{esm_layers}L × {esm_hidden}N"
+    )
+
+    print(
+        f"  Best T-scales architecture : "
+        f"{tsc_layers}L × {tsc_hidden}N"
+    )
+
     print("  — Model 1 (ESM) —")
+
     best_esm = run_optuna(
-        train_ds  = splits["esm"]["train"],
-        val_ds    = splits["esm"]["val"],
-        test_ds   = splits["esm"]["test"],
-        input_dim = splits["esm"]["input_dim"],
-        n_trials  = OPTUNA_TRIALS,
+        train_ds=splits["esm"]["train"],
+        val_ds=splits["esm"]["val"],
+        test_ds=splits["esm"]["test"],
+        input_dim=splits["esm"]["input_dim"],
+        hidden_sz=esm_hidden,
+        n_layers=esm_layers,
+        n_trials=OPTUNA_TRIALS,
     )
 
     print("  — Model 2 (T-scales) —")
+
     best_tsc = run_optuna(
-        train_ds  = splits["tscales"]["train"],
-        val_ds    = splits["tscales"]["val"],
-        test_ds   = splits["tscales"]["test"],
-        input_dim = splits["tscales"]["input_dim"],
-        n_trials  = OPTUNA_TRIALS,
+        train_ds=splits["tscales"]["train"],
+        val_ds=splits["tscales"]["val"],
+        test_ds=splits["tscales"]["test"],
+        input_dim=splits["tscales"]["input_dim"],
+        hidden_sz=tsc_hidden,
+        n_layers=tsc_layers,
+        n_trials=OPTUNA_TRIALS,
     )
 
     return best_esm, best_tsc
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 7  —  Train final models
 # ─────────────────────────────────────────────────────────────────────────────
@@ -375,8 +402,13 @@ if __name__ == "__main__":
     # ── 5. Grid figures ───────────────────────────────────────────────────────
     make_grid_figures(results_esm, results_tsc)
 
-    # ── 6. Optuna (set run=False to skip and use grid-search best instead) ────
-    best_esm, best_tsc = optuna_fine_tune(splits, run=True)
+   # ── 6. Optuna (only lr + batch_size are optimized) ──────────────────────────
+    best_esm, best_tsc = optuna_fine_tune(
+    splits,
+    results_esm,
+    results_tsc,
+    run=True,
+)
 
     # ── 7. Final training ─────────────────────────────────────────────────────
     model_esm, model_tsc, cb_esm, cb_tsc, \

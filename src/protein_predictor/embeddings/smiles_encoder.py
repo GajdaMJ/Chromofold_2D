@@ -73,5 +73,5 @@ class ChemBERTaEncoder:
         inputs  = self.tokenizer(smiles, return_tensors="pt",
                                  truncation=True, padding=True)
         outputs = self.model(**inputs)
-        pooled  = outputs.last_hidden_state.max(dim=1).values.squeeze()
+        pooled  = outputs.last_hidden_state.mean(dim=1).values.squeeze()
         return pooled.numpy().astype(np.float32)
